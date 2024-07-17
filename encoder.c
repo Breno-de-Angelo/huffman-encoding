@@ -183,7 +183,7 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
     FILE *out = fopen(output_filename, "wb");
     if (out == NULL)
     {
-        printf("Erro ao abrir o arquivo %s\n", filename);
+        printf("Erro ao abrir o arquivo %s\n", output_filename);
         exit(1);
     }
 
