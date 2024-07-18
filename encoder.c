@@ -5,8 +5,8 @@
 
 typedef struct huffman_encode
 {
-    uint8_t code;
     uint8_t code_length;
+    uint8_t *code;
 } HuffmanEncode;
 
 typedef struct character_count
@@ -123,7 +123,7 @@ HuffmanTree *build_huffman_tree(CharacterCount *char_count, int num_different_ch
     return prim;
 }
 
-void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *huffman, uint8_t code, int code_length)
+void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *huffman, uint8_t *code, int code_length)
 {
     if (huffman_tree == NULL)
     {
@@ -132,16 +132,26 @@ void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *
     char ch = huffman_tree->info->ch;
     if (ch != 0)
     {
-        huffman[ch].code = code;
+        huffman[ch].code = malloc(((code_length - 1) / 8 + 1) * sizeof(uint8_t));
+        memcpy(huffman[ch].code, code, ((code_length - 1) / 8 + 1) * sizeof(uint8_t));
         huffman[ch].code_length = code_length;
     }
-    build_huffman_encoding_recursion(huffman_tree->left, huffman, (code << 1), code_length + 1);
-    build_huffman_encoding_recursion(huffman_tree->right, huffman, (code << 1 | 1), code_length + 1);
+    if (code_length % 8 == 0)
+    {
+        code = realloc(code, (code_length/8 + 1) * sizeof(uint8_t));
+        code[code_length/8] = 0;
+    }
+    code[code_length/8] <<= 1;
+    build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length + 1);
+    code[code_length/8] |= 1;
+    build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length + 1);
+    code[code_length] >>= 1;
 }
 
 void build_huffman_encoding(HuffmanTree *huffman_tree, HuffmanEncode *huffman)
 {
-    uint8_t code = 0;
+    uint8_t *code = malloc(sizeof(uint8_t));
+    code[0] = 0;
     int code_length = 1;
     if (huffman_tree->left == NULL && huffman_tree->right == NULL)
     {
@@ -149,7 +159,7 @@ void build_huffman_encoding(HuffmanTree *huffman_tree, HuffmanEncode *huffman)
         return;
     }
     build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length);
-    code = 1;
+    code[0] = 1;
     build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length);
 }
 
@@ -160,10 +170,19 @@ void print_huffman_encoding(HuffmanEncode *huffman)
         if (huffman[i].code_length != 0)
         {
             printf("Char: %c, Code: ", i);
-            for (int j = huffman[i].code_length - 1; j >= 0; j--)
+            for (int j = 0; j < huffman[i].code_length / 8; j++)
             {
-                printf("%c", (huffman[i].code & (1 << j))? '1' : '0');
+                for (int k = 7; k >= 0; k--)
+                {
+                    printf("%c", (huffman[i].code[j] & (1 << k))? '1' : '0');
+                }
             }
+            for (int k = huffman[i].code_length % 8 - 1; k >= 0; k--)
+            {
+                printf("%c", (huffman[i].code[huffman[i].code_length/8] & (1 << k))? '1' : '0');
+            }
+            
+            
             printf("\n");
         }
     }
@@ -189,9 +208,8 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
 
     // Primeiro será escrito um cabeçalho com as informações da codificação para permitir
     // que seja feita a decodificação posteriormente. O cabeçalho tem o seguinte formato:
-    // <numero_de_caracteres_distintos><caracter><codigo><numero_de_bits_no_codigo><caracter><codigo>...
-    // ...<caracter><codigo><numero_de_bits_no_codigo><texto_codificado>
-    // Cada campo ocupa um byte.
+    // <numero_de_caracteres_distintos><caracter><numero_de_bits_no_codigo><codigo><caracter>...
+    // ...<caracter><numero_de_bits_no_codigo><codigo><texto_codificado>
     uint8_t num_different_chars_8bits = (uint8_t) num_different_chars;
     fwrite(&num_different_chars_8bits, 1, 1, out);
     for (int i = 0; i < 128; i++)
@@ -200,36 +218,51 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
         {
             char ch = (char) i;
             fwrite(&ch, 1, 1, out);
-            fwrite(&huffman[i].code, 1, 1, out);
             fwrite(&huffman[i].code_length, 1, 1, out);
+            fwrite(huffman[i].code, 1, (huffman[i].code_length - 1)/8 + 1, out);
         }
     }
     
-    uint8_t code = 0;
-    uint8_t bits_used = 0;
+    // uint8_t code = 0;
+    uint8_t bits_left = 8;
+    uint8_t current_byte = 0;
     char ch_read;
     while ((ch_read = fgetc(in)) != EOF)
     {
-        if (huffman[ch_read].code_length + bits_used < 8)
+        uint8_t *content_to_write = huffman[ch_read].code;
+        uint8_t code_length = huffman[ch_read].code_length;
+        int i = 0;
+        
+        for (; i < code_length/8; i++)
         {
-            code <<= huffman[ch_read].code_length;
-            code |= huffman[ch_read].code;
-            bits_used += huffman[ch_read].code_length;
+            current_byte |= (content_to_write[i] >> (8 - bits_left));
+            fwrite(&current_byte, 1, 1, out);
+            current_byte = 0;
+            current_byte |= (content_to_write[i] << bits_left);
+        }
+
+        uint8_t bits_to_write = code_length % 8;
+        if (bits_to_write <= bits_left)
+        {
+            bits_left = bits_left - bits_to_write;
+            current_byte |= (content_to_write[i] << bits_left);
+            if (bits_left == 0)
+            {
+                fwrite(&current_byte, 1, 1, out);
+            }
         }
         else
         {
-            code <<= (8 - bits_used);
-            code |= (huffman[ch_read].code >> (huffman[ch_read].code_length - (8 - bits_used)));
-            fwrite(&code, 1, 1, out);
-            code = 0;
-            code |= (huffman[ch_read].code >> (8 - bits_used));
-            bits_used = huffman[ch_read].code_length - (8 - bits_used);
+            current_byte |= (content_to_write[i] >> (bits_to_write - bits_left));
+            fwrite(&current_byte, 1, 1, out);
+            current_byte = 0;
+            bits_left = 8 - (bits_to_write - bits_left);
+            current_byte |= (content_to_write[i] << bits_left);
         }
     }
-    if (bits_used != 0)
+    if (bits_left != 8)
     {
-        code <<= (8 - bits_used);
-        fwrite(&code, 1, 1, out);
+        fwrite(&current_byte, 1, 1, out);
     }
     fclose(in);
     fclose(out);
