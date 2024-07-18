@@ -24,7 +24,7 @@ typedef struct huffman_tree
 } HuffmanTree;
 
 
-int count_characters(char *filename, CharacterCount *char_count)
+int count_characters(char *filename, CharacterCount *char_count, uint64_t *total_characters)
 {
     FILE *file = fopen(filename, "r");
     if (file == NULL)
@@ -38,6 +38,7 @@ int count_characters(char *filename, CharacterCount *char_count)
     while ((ch = fgetc(file)) != EOF)
     {
         char_count[(int) ch].count++;
+        (*total_characters)++;
     }
     fclose(file);
 
@@ -181,14 +182,12 @@ void print_huffman_encoding(HuffmanEncode *huffman)
             {
                 printf("%c", (huffman[i].code[huffman[i].code_length/8] & (1 << k))? '1' : '0');
             }
-            
-            
             printf("\n");
         }
     }
 }
 
-void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_different_chars)
+void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_different_chars, uint64_t total_chars)
 {
     FILE *in = fopen(filename, "r");
     if (in == NULL)
@@ -208,8 +207,9 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
 
     // Primeiro será escrito um cabeçalho com as informações da codificação para permitir
     // que seja feita a decodificação posteriormente. O cabeçalho tem o seguinte formato:
-    // <numero_de_caracteres_distintos><caracter><numero_de_bits_no_codigo><codigo><caracter>...
+    // <total_de_cacteres><numero_de_caracteres_distintos><caracter><numero_de_bits_no_codigo><codigo>...
     // ...<caracter><numero_de_bits_no_codigo><codigo><texto_codificado>
+    fwrite(&total_chars, sizeof(uint64_t), 1, out);
     uint8_t num_different_chars_8bits = (uint8_t) num_different_chars;
     fwrite(&num_different_chars_8bits, 1, 1, out);
     for (int i = 0; i < 128; i++)
@@ -293,7 +293,8 @@ int main(int argc, char **argv)
     // O primeiro passo é contar a ocorrência dos caracteres
     CharacterCount char_count[128] = {0};
     int num_different_chars;
-    num_different_chars = count_characters(filename, char_count);
+    uint64_t total_chars = 0;
+    num_different_chars = count_characters(filename, char_count, &total_chars);
     if (num_different_chars == 0)
     {
         printf("Arquivo vazio!\n");
@@ -316,7 +317,7 @@ int main(int argc, char **argv)
     print_huffman_encoding(huffman);
 
     // Escrever arquivo usando a codificação
-    write_compressed_file(filename, huffman, num_different_chars);
+    write_compressed_file(filename, huffman, num_different_chars, total_chars);
 
     return 0;
 }
