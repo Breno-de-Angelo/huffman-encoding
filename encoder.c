@@ -124,11 +124,11 @@ HuffmanTree *build_huffman_tree(CharacterCount *char_count, int num_different_ch
     return prim;
 }
 
-void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *huffman, uint8_t *code, int code_length)
+uint8_t *build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *huffman, uint8_t *code, int code_length)
 {
     if (huffman_tree == NULL)
     {
-        return;
+        return code;
     }
     char ch = huffman_tree->info->ch;
     if (ch != 0)
@@ -143,10 +143,11 @@ void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *
         code[code_length/8] = 0;
     }
     code[code_length/8] <<= 1;
-    build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length + 1);
+    code = build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length + 1);
     code[code_length/8] |= 1;
-    build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length + 1);
+    code = build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length + 1);
     code[code_length/8] >>= 1;
+    return code;
 }
 
 void build_huffman_encoding(HuffmanTree *huffman_tree, HuffmanEncode *huffman)
@@ -157,11 +158,13 @@ void build_huffman_encoding(HuffmanTree *huffman_tree, HuffmanEncode *huffman)
     if (huffman_tree->left == NULL && huffman_tree->right == NULL)
     {
         build_huffman_encoding_recursion(huffman_tree, huffman, code, code_length);
+        free(code);
         return;
     }
-    build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length);
+    code = build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length);
     code[0] = 1;
-    build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length);
+    code = build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length);
+    free(code);
 }
 
 void print_huffman_encoding(HuffmanEncode *huffman)
@@ -242,6 +245,10 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
         }
 
         uint8_t bits_to_write = code_length % 8;
+        if (!bits_to_write)
+        {
+            continue;
+        }
         if (bits_to_write <= bits_left)
         {
             bits_left = bits_left - bits_to_write;
@@ -268,6 +275,32 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
     }
     fclose(in);
     fclose(out);
+}
+
+void free_huffman_tree(HuffmanTree *huffman_tree)
+{
+    if (huffman_tree == NULL)
+    {
+        return;
+    }
+    free_huffman_tree(huffman_tree->left);
+    free_huffman_tree(huffman_tree->right);
+    if (huffman_tree->info->ch == 0)
+    {
+        free(huffman_tree->info);
+    }
+    free(huffman_tree);
+}
+
+void free_huffman(HuffmanEncode *huffman)
+{
+    for (int i = 0; i < 128; i++)
+    {
+        if (huffman[i].code_length > 0)
+        {
+            free(huffman[i].code);
+        }
+    }
 }
 
 void print_help()
@@ -320,6 +353,12 @@ int main(int argc, char **argv)
 
     // Escrever arquivo usando a codificação
     write_compressed_file(filename, huffman, num_different_chars, total_chars);
+
+    // Liberar memória da árvore de huffman
+    free_huffman_tree(huffman_tree);
+
+    // Liberar memória da codificação de huffman
+    free_huffman(huffman);
 
     return 0;
 }
