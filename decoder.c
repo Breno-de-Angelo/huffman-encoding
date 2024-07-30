@@ -116,6 +116,7 @@ HuffmanDecode *read_header(FILE *in, uint8_t num_different_chars)
         uint8_t *code = malloc((code_length-1)/8 + 1);
         fread(code, 1, (code_length-1)/8 + 1, in);
         insert_new_character(huffman, character, code_length, code);
+        free(code);
     }
     return huffman;
 }
@@ -155,6 +156,17 @@ void decode(FILE *in, FILE *out, HuffmanDecode *huffman, uint64_t total_chars)
     }
 }
 
+void free_huffman_decode(HuffmanDecode *huffman)
+{
+    if (huffman == NULL)
+    {
+        return;
+    }
+    free_huffman_decode(huffman->left);
+    free_huffman_decode(huffman->right);
+    free(huffman);
+}
+
 void print_help()
 {
     printf("Para usar o descompactador rode:\n");
@@ -188,6 +200,8 @@ int main(int argc, char **argv)
 
     fclose(in);
     fclose(out);
+
+    free_huffman_decode(huffman);
 
     return 0;
 }
