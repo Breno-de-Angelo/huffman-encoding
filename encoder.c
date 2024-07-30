@@ -133,9 +133,9 @@ void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *
     char ch = huffman_tree->info->ch;
     if (ch != 0)
     {
-        huffman[ch].code = malloc(((code_length - 1) / 8 + 1) * sizeof(uint8_t));
-        memcpy(huffman[ch].code, code, ((code_length - 1) / 8 + 1) * sizeof(uint8_t));
-        huffman[ch].code_length = code_length;
+        huffman[(int) ch].code = malloc(((code_length - 1) / 8 + 1) * sizeof(uint8_t));
+        memcpy(huffman[(int) ch].code, code, ((code_length - 1) / 8 + 1) * sizeof(uint8_t));
+        huffman[(int) ch].code_length = code_length;
     }
     if (code_length % 8 == 0)
     {
@@ -146,7 +146,7 @@ void build_huffman_encoding_recursion(HuffmanTree *huffman_tree, HuffmanEncode *
     build_huffman_encoding_recursion(huffman_tree->left, huffman, code, code_length + 1);
     code[code_length/8] |= 1;
     build_huffman_encoding_recursion(huffman_tree->right, huffman, code, code_length + 1);
-    code[code_length] >>= 1;
+    code[code_length/8] >>= 1;
 }
 
 void build_huffman_encoding(HuffmanTree *huffman_tree, HuffmanEncode *huffman)
@@ -229,8 +229,8 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
     char ch_read;
     while ((ch_read = fgetc(in)) != EOF)
     {
-        uint8_t *content_to_write = huffman[ch_read].code;
-        uint8_t code_length = huffman[ch_read].code_length;
+        uint8_t *content_to_write = huffman[(int) ch_read].code;
+        uint8_t code_length = huffman[(int) ch_read].code_length;
         int i = 0;
         
         for (; i < code_length/8; i++)
@@ -249,6 +249,8 @@ void write_compressed_file(char *filename, HuffmanEncode *huffman, int num_diffe
             if (bits_left == 0)
             {
                 fwrite(&current_byte, 1, 1, out);
+                current_byte = 0;
+                bits_left = 8;
             }
         }
         else

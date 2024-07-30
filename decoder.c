@@ -49,17 +49,25 @@ void insert_new_character(HuffmanDecode *huffman, char character, uint8_t code_l
         {
             if (code[j] & (1 << k))
             {
+                if (huffman->right == NULL)
+                {
+                    huffman->right = malloc(sizeof(HuffmanDecode));
+                    huffman->right->character = 0;
+                    huffman->right->left = NULL;
+                    huffman->right->right = NULL;
+                }
                 huffman = huffman->right;
             }
             else
             {
+                if (huffman->left == NULL)
+                {
+                    huffman->left = malloc(sizeof(HuffmanDecode));
+                    huffman->left->character = 0;
+                    huffman->left->left = NULL;
+                    huffman->left->right = NULL;
+                }
                 huffman = huffman->left;
-            }
-            if (huffman == NULL)
-            {
-                huffman = malloc(sizeof(HuffmanDecode));
-                huffman->left = NULL;
-                huffman->right = NULL;
             }
         }
     }
